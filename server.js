@@ -330,6 +330,55 @@ app.post('/api/admin/set-phase', requireAdmin, (req, res) => {
   res.json({ ok: true, phase: data.phase });
 });
 
+// Admin results/scoreboard
+app.get('/api/admin/results', requireAdmin, (req, res) => {
+  const data = loadData();
+
+  const answerKey = {};
+  for (const s of data.sentences) {
+    answerKey[s.username] = s.text;
+  }
+
+  const totalStudents = data.sentences.length;
+
+  const scoreboard = [];
+  for (const user of data.users) {
+    const guessEntry = data.guesses.find(g => g.guesserUsername === user.username);
+    let score = 0;
+
+    if (guessEntry) {
+      for (const [guessedUsername, guessedSentence] of Object.entries(guessEntry.guessMap)) {
+        if (guessedUsername === user.username) continue;
+        if (answerKey[guessedUsername] === guessedSentence) {
+          score++;
+        }
+      }
+    }
+
+    scoreboard.push({
+      username: user.username,
+      displayName: user.displayName,
+      score
+    });
+  }
+
+  scoreboard.sort((a, b) => b.score - a.score);
+
+  const answerKeyDisplay = data.sentences.map(s => {
+    const user = data.users.find(u => u.username === s.username);
+    return {
+      displayName: user ? user.displayName : s.username,
+      sentence: s.text
+    };
+  });
+
+  res.json({
+    scoreboard,
+    totalPossible: totalStudents - 1,
+    answerKey: answerKeyDisplay
+  });
+});
+
 // Reset all data
 app.post('/api/admin/reset', requireAdmin, (req, res) => {
   const defaults = { phase: 1, users: [], sentences: [], guesses: [] };

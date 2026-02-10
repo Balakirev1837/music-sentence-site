@@ -45,6 +45,23 @@
       <button id="reset-btn" class="danger full-width">Reset Game</button>
     </div>
 
+    <!-- Scoreboard (phase 4) -->
+    <div id="scoreboard-section" class="card hidden">
+      <h2>Scoreboard</h2>
+      <table id="scoreboard">
+        <thead>
+          <tr><th>#</th><th>Student</th><th>Score</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Answer Key (phase 4) -->
+    <div id="answer-key-section" class="card hidden">
+      <h2>Answer Key</h2>
+      <div id="answer-key"></div>
+    </div>
+
     <!-- Student List -->
     <div class="card">
       <h2>Students</h2>
@@ -114,6 +131,14 @@
         } else {
           advBtn.disabled = false;
           advBtn.textContent = 'Advance to Phase ' + (data.phase + 1) + ': ' + phaseNames[data.phase + 1];
+        }
+
+        // Scoreboard (phase 4)
+        if (data.phase === 4) {
+          loadResults();
+        } else {
+          document.getElementById('scoreboard-section').classList.add('hidden');
+          document.getElementById('answer-key-section').classList.add('hidden');
         }
 
         // Student list
@@ -186,6 +211,32 @@
       await fetch('/api/logout', { method: 'POST' });
       window.location.href = '/';
     });
+
+    async function loadResults() {
+      try {
+        const res = await fetch('/api/admin/results');
+        const data = await res.json();
+
+        // Scoreboard
+        const section = document.getElementById('scoreboard-section');
+        section.classList.remove('hidden');
+        const tbody = document.querySelector('#scoreboard tbody');
+        tbody.innerHTML = data.scoreboard.map((entry, i) =>
+          '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(entry.displayName) +
+          '</td><td>' + entry.score + ' / ' + data.totalPossible + '</td></tr>'
+        ).join('');
+
+        // Answer key
+        const keySection = document.getElementById('answer-key-section');
+        keySection.classList.remove('hidden');
+        document.getElementById('answer-key').innerHTML = data.answerKey.map(entry =>
+          '<div class="sentence-card"><div><strong>' + escapeHtml(entry.displayName) +
+          '</strong></div><div class="sentence-text">"' + escapeHtml(entry.sentence) + '"</div></div>'
+        ).join('');
+      } catch (err) {
+        // Ignore errors
+      }
+    }
 
     function escapeHtml(text) {
       const div = document.createElement('div');
