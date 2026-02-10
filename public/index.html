@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentence Game - Login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Sentence Guessing Game</h1>
+    <p class="subtitle">Log in or create an account to play</p>
+
+    <!-- Login Form -->
+    <div id="login-section" class="card">
+      <h2>Log In</h2>
+      <div id="login-error" class="error hidden"></div>
+      <form id="login-form">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" autocomplete="username" required>
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" autocomplete="current-password" required>
+        <button type="submit" class="full-width">Log In</button>
+      </form>
+      <p style="margin-top: 1rem; text-align: center;">
+        Don't have an account? <a href="#" id="show-register">Create one</a>
+      </p>
+    </div>
+
+    <!-- Register Form -->
+    <div id="register-section" class="card hidden">
+      <h2>Create Account</h2>
+      <div id="register-error" class="error hidden"></div>
+      <form id="register-form">
+        <label for="reg-username">Username</label>
+        <input type="text" id="reg-username" placeholder="e.g. jsmith" required>
+        <label for="reg-display">Display Name</label>
+        <input type="text" id="reg-display" placeholder="e.g. John Smith" required>
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" required>
+        <button type="submit" class="full-width">Create Account</button>
+      </form>
+      <p style="margin-top: 1rem; text-align: center;">
+        Already have an account? <a href="#" id="show-login">Log in</a>
+      </p>
+    </div>
+
+    <!-- Admin Login -->
+    <div style="text-align: center; margin-top: 1.5rem;">
+      <a href="#" id="show-admin">Teacher? Admin login</a>
+    </div>
+
+    <div id="admin-section" class="card hidden">
+      <h2>Admin Login</h2>
+      <div id="admin-error" class="error hidden"></div>
+      <form id="admin-form">
+        <label for="admin-password">Admin Password</label>
+        <input type="password" id="admin-password" required>
+        <button type="submit" class="full-width">Enter Admin Panel</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Check if already logged in
+    fetch('/api/me').then(r => r.json()).then(data => {
+      if (data.loggedIn && data.isAdmin) {
+        window.location.href = '/admin.html';
+      } else if (data.loggedIn) {
+        window.location.href = '/game.html';
+      }
+    });
+
+    // Toggle forms
+    document.getElementById('show-register').addEventListener('click', e => {
+      e.preventDefault();
+      document.getElementById('login-section').classList.add('hidden');
+      document.getElementById('register-section').classList.remove('hidden');
+    });
+
+    document.getElementById('show-login').addEventListener('click', e => {
+      e.preventDefault();
+      document.getElementById('register-section').classList.add('hidden');
+      document.getElementById('login-section').classList.remove('hidden');
+    });
+
+    document.getElementById('show-admin').addEventListener('click', e => {
+      e.preventDefault();
+      document.getElementById('admin-section').classList.toggle('hidden');
+    });
+
+    // Login
+    document.getElementById('login-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('login-error');
+      errEl.classList.add('hidden');
+
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('login-username').value,
+          password: document.getElementById('login-password').value
+        })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = '/game.html';
+      } else {
+        errEl.textContent = data.error;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    // Register
+    document.getElementById('register-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('register-error');
+      errEl.classList.add('hidden');
+
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('reg-username').value,
+          displayName: document.getElementById('reg-display').value,
+          password: document.getElementById('reg-password').value
+        })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = '/game.html';
+      } else {
+        errEl.textContent = data.error;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    // Admin login
+    document.getElementById('admin-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('admin-error');
+      errEl.classList.add('hidden');
+
+      const res = await fetch('/api/admin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: document.getElementById('admin-password').value
+        })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = '/admin.html';
+      } else {
+        errEl.textContent = data.error;
+        errEl.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

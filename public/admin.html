@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentence Game - Admin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header-bar">
+      <div class="user-info">Admin Panel</div>
+      <button class="secondary" id="logout-btn">Log Out</button>
+    </div>
+
+    <h1>Game Control</h1>
+
+    <!-- Phase Display -->
+    <div class="card" style="text-align: center;">
+      <p style="margin-bottom: 0.5rem;">Current Phase</p>
+      <span id="phase-badge" class="phase-badge">Loading...</span>
+    </div>
+
+    <!-- Status Grid -->
+    <div class="status-grid">
+      <div class="status-item">
+        <div class="number" id="user-count">0</div>
+        <div class="label">Students</div>
+      </div>
+      <div class="status-item">
+        <div class="number" id="sentence-count">0</div>
+        <div class="label">Sentences</div>
+      </div>
+      <div class="status-item">
+        <div class="number" id="guess-count">0</div>
+        <div class="label">Guesses</div>
+      </div>
+    </div>
+
+    <!-- Phase Controls -->
+    <div class="card">
+      <h2>Phase Controls</h2>
+      <p id="phase-description" style="margin-bottom: 1rem; color: #666;"></p>
+      <button id="advance-btn" class="full-width" style="margin-bottom: 0.75rem;">Advance to Next Phase</button>
+      <button id="reset-btn" class="danger full-width">Reset Game</button>
+    </div>
+
+    <!-- Student List -->
+    <div class="card">
+      <h2>Students</h2>
+      <ul id="student-list" class="student-list">
+        <li style="color: #9ca3af;">No students yet</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const phaseNames = {
+      1: 'Registration',
+      2: 'Sentence Submission',
+      3: 'Guessing',
+      4: 'Results'
+    };
+
+    const phaseDescriptions = {
+      1: 'Students are registering and logging in. Advance when everyone is ready.',
+      2: 'Students are submitting their sentences. Advance when all sentences are in.',
+      3: 'Students are guessing who wrote each sentence. Advance when everyone has guessed.',
+      4: 'The game is over! Students can see the scoreboard and answer key.'
+    };
+
+    let currentPhase = 0;
+
+    // --- Init ---
+    async function init() {
+      const res = await fetch('/api/me');
+      const data = await res.json();
+
+      if (!data.isAdmin) {
+        window.location.href = '/';
+        return;
+      }
+
+      await refreshStatus();
+      setInterval(refreshStatus, 3000);
+    }
+
+    // --- Refresh Status ---
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/api/admin/status');
+        const data = await res.json();
+
+        currentPhase = data.phase;
+
+        // Phase badge
+        const badge = document.getElementById('phase-badge');
+        badge.textContent = 'Phase ' + data.phase + ': ' + phaseNames[data.phase];
+        badge.className = 'phase-badge phase-' + data.phase;
+
+        // Description
+        document.getElementById('phase-description').textContent = phaseDescriptions[data.phase];
+
+        // Counts
+        document.getElementById('user-count').textContent = data.userCount;
+        document.getElementById('sentence-count').textContent = data.sentenceCount;
+        document.getElementById('guess-count').textContent = data.guessCount;
+
+        // Advance button
+        const advBtn = document.getElementById('advance-btn');
+        if (data.phase >= 4) {
+          advBtn.disabled = true;
+          advBtn.textContent = 'Game Complete';
+        } else {
+          advBtn.disabled = false;
+          advBtn.textContent = 'Advance to Phase ' + (data.phase + 1) + ': ' + phaseNames[data.phase + 1];
+        }
+
+        // Student list
+        const list = document.getElementById('student-list');
+        if (data.users.length === 0) {
+          list.innerHTML = '<li style="color: #9ca3af;">No students yet</li>';
+        } else {
+          list.innerHTML = data.users.map(u => {
+            let status = '';
+            if (data.phase >= 2) {
+              status += u.hasSentence
+                ? '<span class="check">Sentence submitted</span>'
+                : '<span class="pending-mark">No sentence</span>';
+            }
+            if (data.phase >= 3) {
+              status += ' | ' + (u.hasGuessed
+                ? '<span class="check">Guessed</span>'
+                : '<span class="pending-mark">Not guessed</span>');
+            }
+            return '<li><span>' + escapeHtml(u.displayName) + '</span><span>' + status + '</span></li>';
+          }).join('');
+        }
+      } catch (err) {
+        // Ignore polling errors
+      }
+    }
+
+    // --- Advance Phase ---
+    document.getElementById('advance-btn').addEventListener('click', async () => {
+      if (currentPhase >= 4) return;
+
+      const nextPhase = currentPhase + 1;
+      const confirmed = confirm('Advance to Phase ' + nextPhase + ': ' + phaseNames[nextPhase] + '?');
+      if (!confirmed) return;
+
+      const res = await fetch('/api/admin/set-phase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phase: nextPhase })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        await refreshStatus();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    });
+
+    // --- Reset Game ---
+    document.getElementById('reset-btn').addEventListener('click', async () => {
+      const confirmed = confirm('Are you sure? This will delete ALL data and reset to Phase 1.');
+      if (!confirmed) return;
+
+      const res = await fetch('/api/admin/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        await refreshStatus();
+      } else {
+        alert('Error: ' + data.error);
+      }
+    });
+
+    // --- Logout ---
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/';
+    });
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    init();
+  </script>
+</body>
+</html>

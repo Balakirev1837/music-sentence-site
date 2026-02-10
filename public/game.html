@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentence Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header-bar">
+      <div class="user-info">Hi, <strong id="display-name"></strong></div>
+      <button class="secondary" id="logout-btn">Log Out</button>
+    </div>
+
+    <h1>Sentence Game</h1>
+
+    <!-- Phase 1: Waiting for submissions to open -->
+    <div id="phase-1" class="hidden">
+      <div class="card waiting">
+        <p>Welcome! Waiting for the teacher to start the sentence submission phase<span class="dots"></span></p>
+      </div>
+    </div>
+
+    <!-- Phase 2: Submit a sentence -->
+    <div id="phase-2" class="hidden">
+      <div class="card">
+        <h2>Submit Your Sentence</h2>
+        <p class="subtitle" style="margin-bottom: 1rem;">Write any sentence. Other students will try to guess who wrote it!</p>
+        <div id="submit-error" class="error hidden"></div>
+        <div id="submit-success" class="success hidden"></div>
+        <form id="sentence-form">
+          <label for="sentence-input">Your Sentence</label>
+          <textarea id="sentence-input" placeholder="Type your sentence here..." required></textarea>
+          <button type="submit" class="full-width">Submit Sentence</button>
+        </form>
+      </div>
+      <div id="sentence-submitted" class="card waiting hidden">
+        <p>Sentence submitted! Waiting for the guessing phase to begin<span class="dots"></span></p>
+      </div>
+    </div>
+
+    <!-- Phase 3: Guess who wrote each sentence -->
+    <div id="phase-3" class="hidden">
+      <div class="card">
+        <h2>Guess Who Wrote Each Sentence</h2>
+        <p class="subtitle" style="margin-bottom: 1rem;">Match each sentence to the student you think wrote it. Each name can only be used once.</p>
+        <div id="guess-error" class="error hidden"></div>
+      </div>
+      <div id="sentences-list"></div>
+      <button id="submit-guesses-btn" class="full-width" style="margin-top: 0.5rem;">Submit Guesses</button>
+      <div id="guesses-submitted" class="card waiting hidden" style="margin-top: 1rem;">
+        <p>Guesses submitted! Waiting for the results<span class="dots"></span></p>
+      </div>
+    </div>
+
+    <!-- Phase 4: Results -->
+    <div id="phase-4" class="hidden">
+      <div class="card">
+        <h2>Results</h2>
+        <p class="info" id="my-score-text"></p>
+        <table id="scoreboard">
+          <thead>
+            <tr><th>#</th><th>Student</th><th>Score</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Answer Key</h2>
+        <div id="answer-key"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let currentPhase = 0;
+    let sentenceData = null;
+    let hasSubmittedSentence = false;
+    let hasSubmittedGuesses = false;
+
+    // --- Init ---
+    async function init() {
+      const res = await fetch('/api/me');
+      const data = await res.json();
+
+      if (!data.loggedIn || data.isAdmin) {
+        window.location.href = '/';
+        return;
+      }
+
+      currentUser = data;
+      document.getElementById('display-name').textContent = data.displayName;
+
+      await checkPhase();
+      setInterval(checkPhase, 3000);
+    }
+
+    // --- Phase Polling ---
+    async function checkPhase() {
+      try {
+        const res = await fetch('/api/phase');
+        const data = await res.json();
+
+        if (data.phase !== currentPhase) {
+          currentPhase = data.phase;
+          showPhase(currentPhase);
+        }
+      } catch (err) {
+        // Ignore polling errors
+      }
+    }
+
+    function showPhase(phase) {
+      // Hide all phase sections
+      document.querySelectorAll('[id^="phase-"]').forEach(el => el.classList.add('hidden'));
+
+      const section = document.getElementById('phase-' + phase);
+      if (section) {
+        section.classList.remove('hidden');
+      }
+
+      // Load phase-specific data
+      if (phase === 3 && !sentenceData) {
+        loadSentences();
+      }
+      if (phase === 4) {
+        loadResults();
+      }
+    }
+
+    // --- Logout ---
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/';
+    });
+
+    // --- Phase 2: Submit Sentence ---
+    document.getElementById('sentence-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const errEl = document.getElementById('submit-error');
+      const successEl = document.getElementById('submit-success');
+      errEl.classList.add('hidden');
+      successEl.classList.add('hidden');
+
+      const text = document.getElementById('sentence-input').value.trim();
+      if (!text) return;
+
+      const res = await fetch('/api/submit-sentence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        hasSubmittedSentence = true;
+        document.getElementById('sentence-form').classList.add('hidden');
+        document.getElementById('sentence-submitted').classList.remove('hidden');
+      } else {
+        errEl.textContent = data.error;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    // --- Phase 3: Load Sentences ---
+    async function loadSentences() {
+      try {
+        const res = await fetch('/api/sentences');
+        const data = await res.json();
+
+        if (data.error) return;
+
+        sentenceData = data;
+        renderSentences();
+      } catch (err) {
+        // Retry on next poll cycle
+      }
+    }
+
+    function renderSentences() {
+      const container = document.getElementById('sentences-list');
+      container.innerHTML = '';
+
+      sentenceData.sentences.forEach((sentence, i) => {
+        const card = document.createElement('div');
+        card.className = 'sentence-card';
+
+        const text = document.createElement('div');
+        text.className = 'sentence-text';
+        text.textContent = '"' + sentence + '"';
+
+        const select = document.createElement('select');
+        select.dataset.index = i;
+        select.className = 'guess-select';
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = '-- Select a student --';
+        select.appendChild(defaultOpt);
+
+        sentenceData.students.forEach(student => {
+          const opt = document.createElement('option');
+          opt.value = student.username;
+          opt.textContent = student.displayName;
+          select.appendChild(opt);
+        });
+
+        card.appendChild(text);
+        card.appendChild(select);
+        container.appendChild(card);
+      });
+
+      // Track used selections to prevent duplicates
+      container.addEventListener('change', updateDropdowns);
+    }
+
+    function updateDropdowns() {
+      const selects = document.querySelectorAll('.guess-select');
+      const used = new Set();
+
+      // Collect all selected values
+      selects.forEach(sel => {
+        if (sel.value) used.add(sel.value);
+      });
+
+      // Disable already-used options in other dropdowns
+      selects.forEach(sel => {
+        const options = sel.querySelectorAll('option');
+        options.forEach(opt => {
+          if (opt.value === '') return;
+          // Disable if used by another dropdown, but not this one
+          opt.disabled = used.has(opt.value) && sel.value !== opt.value;
+        });
+      });
+    }
+
+    // --- Phase 3: Submit Guesses ---
+    document.getElementById('submit-guesses-btn').addEventListener('click', async () => {
+      const errEl = document.getElementById('guess-error');
+      errEl.classList.add('hidden');
+
+      const selects = document.querySelectorAll('.guess-select');
+      const guessMap = {};
+      let allFilled = true;
+
+      selects.forEach((sel, i) => {
+        if (!sel.value) {
+          allFilled = false;
+        } else {
+          guessMap[sel.value] = sentenceData.sentences[i];
+        }
+      });
+
+      if (!allFilled) {
+        errEl.textContent = 'Please match every sentence to a student before submitting.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      const res = await fetch('/api/submit-guesses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guessMap })
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        hasSubmittedGuesses = true;
+        document.getElementById('submit-guesses-btn').classList.add('hidden');
+        document.querySelectorAll('.guess-select').forEach(sel => sel.disabled = true);
+        document.getElementById('guesses-submitted').classList.remove('hidden');
+      } else {
+        errEl.textContent = data.error;
+        errEl.classList.remove('hidden');
+      }
+    });
+
+    // --- Phase 4: Load Results ---
+    async function loadResults() {
+      try {
+        const res = await fetch('/api/results');
+        const data = await res.json();
+
+        if (data.error) return;
+
+        // My score
+        document.getElementById('my-score-text').textContent =
+          'Your score: ' + data.myScore + ' out of ' + data.totalPossible;
+
+        // Scoreboard
+        const tbody = document.querySelector('#scoreboard tbody');
+        tbody.innerHTML = '';
+        data.scoreboard.forEach((entry, i) => {
+          const tr = document.createElement('tr');
+          if (entry.username === currentUser.username) {
+            tr.className = 'highlight';
+          }
+          tr.innerHTML =
+            '<td>' + (i + 1) + '</td>' +
+            '<td>' + escapeHtml(entry.displayName) + '</td>' +
+            '<td>' + entry.score + ' / ' + data.totalPossible + '</td>';
+          tbody.appendChild(tr);
+        });
+
+        // Answer key
+        const keyContainer = document.getElementById('answer-key');
+        keyContainer.innerHTML = '';
+        data.answerKey.forEach(entry => {
+          const div = document.createElement('div');
+          div.className = 'sentence-card';
+          div.innerHTML =
+            '<div><strong>' + escapeHtml(entry.displayName) + '</strong></div>' +
+            '<div class="sentence-text">"' + escapeHtml(entry.sentence) + '"</div>';
+          keyContainer.appendChild(div);
+        });
+      } catch (err) {
+        // Retry on next poll cycle
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    init();
+  </script>
+</body>
+</html>
