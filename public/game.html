@@ -67,10 +67,6 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="card">
-        <h2>Answer Key</h2>
-        <div id="answer-key"></div>
-      </div>
     </div>
   </div>
 
@@ -305,17 +301,6 @@
           tbody.appendChild(tr);
         });
 
-        // Answer key
-        const keyContainer = document.getElementById('answer-key');
-        keyContainer.innerHTML = '';
-        data.answerKey.forEach(entry => {
-          const div = document.createElement('div');
-          div.className = 'sentence-card';
-          div.innerHTML =
-            '<div><strong>' + escapeHtml(entry.displayName) + '</strong></div>' +
-            '<div class="sentence-text">"' + escapeHtml(entry.sentence) + '"</div>';
-          keyContainer.appendChild(div);
-        });
       } catch (err) {
         // Retry on next poll cycle
       }

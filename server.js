@@ -266,15 +266,6 @@ app.get('/api/results', requireLogin, (req, res) => {
   // Sort by score descending
   scoreboard.sort((a, b) => b.score - a.score);
 
-  // Build answer key for display
-  const answerKeyDisplay = data.sentences.map(s => {
-    const user = data.users.find(u => u.username === s.username);
-    return {
-      displayName: user ? user.displayName : s.username,
-      sentence: s.text
-    };
-  });
-
   // Find current user's score
   const myEntry = scoreboard.find(s => s.username === req.session.username);
   const myScore = myEntry ? myEntry.score : 0;
@@ -282,8 +273,7 @@ app.get('/api/results', requireLogin, (req, res) => {
   res.json({
     scoreboard,
     totalPossible: totalStudents - 1,
-    myScore,
-    answerKey: answerKeyDisplay
+    myScore
   });
 });
 
